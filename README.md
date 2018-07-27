@@ -17,7 +17,7 @@ duplicates).
 Then I thought to approach it in opposite direction. I will first get a list of all possible words
 that could contribute to a potential anagram. We have 99175 in wordlist, the permutation of three
 words of such list is huge: 99175 * 99175 * 99175 = 975_453_625_984_375. By applying specific
-conditions documented in [find-hash.rb](find-hash) I managed to reduce the list to 1659 which has
+conditions documented in [find-hash.rb](find-hash.rb) I managed to reduce the list to 1659 which has
 4_566_034_179 permutations. It is still large but on DigitalOcean 24 cores it took 5 min to
 compute:
 
