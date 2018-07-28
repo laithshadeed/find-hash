@@ -94,7 +94,7 @@ def find_hash(possible_words, known_anagram, known_md5s, start, n = 3)
 
         # Allow only equal hash phrases
         hash = get_hash(phrase, hash_table)
-        next unless hash = known_hash
+        next unless hash == known_hash
 
         # All only equal md5 phrases
         md5 = Digest::MD5.hexdigest phrase
