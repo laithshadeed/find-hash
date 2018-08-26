@@ -2,26 +2,37 @@
  * clang -std=c89 -lcrypto find-hash.c -o find-hash
  * Run with:
  * ./find-hash wordlist
+ *
+ * printout stout yawls
+ * ty outlaws printouts
+ * wu lisp not statutory
+ *
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <openssl/md5.h>
 
+/* TODO: HASH_SIZE should be only characters in the anagram not the whole alphabet */
 #define HASH_SIZE 26
-#define MAX_WORD_SIZE 25
-#define MAX_ANAGRAM_SIZE 21
-#define MAX_NUM_WORDS 1659
+#define WORD_LENGTH 25
+#define ANAGRAM_LENGTH 23
+#define MAX_POSSIBLE_WORDS 2000
+
+long int count = 0;
 
 struct word {
   unsigned short int len;
-  char text[];
+  unsigned short int hash [HASH_SIZE];
+  char value[];
 };
 
-int getHash(const char * word, int * const hash) {
+int getHash(const char * word, unsigned short int * const hash) {
   int i;
   for (i = 0; i < strlen(word); i += 1) {
     char c = word[i];
+    if (c == ' ') continue; /* Skip space character */
     int index = c - 97;
     if (index < 0 || index > 25) return 0;
     hash[index] = hash[index] != 0 ? hash[index] + 1 : 1;
@@ -29,8 +40,8 @@ int getHash(const char * word, int * const hash) {
   return 1;
 }
 
-int isValidHash(const char * word, const int * knownHash) {
-  int hash[HASH_SIZE] = {0};
+int isValidHash(const char * word, const unsigned short int * knownHash) {
+  unsigned short int hash[HASH_SIZE] = {0};
   int canHash = getHash(word, hash);
   int i = 0;
   for (i = 0; i < HASH_SIZE; i += 1) {
@@ -42,152 +53,194 @@ int isValidHash(const char * word, const int * knownHash) {
   return 1;
 }
 
-int isKnownWord(struct word * words[], const char * newWord) {
+int isKnownWord(struct word * words[], const char * newWord, int possibleWordsCount) {
   int i = 0;
-  for (i = 0; i < MAX_NUM_WORDS; i += 1) {
-    if (strcmp(words[i]->text, newWord) == 0) {
+  for (i = 0; i < possibleWordsCount; i += 1) {
+    if (strcmp(words[i]->value, newWord) == 0) {
       return 1;
     }
   }
   return 0;
 }
 
-void getPossibleWord(const char * filepath, int * knownAnagramHash, struct word * words[]) {
+int getPossibleWord(const char * filepath, unsigned short int * knownAnagramHash, struct word * words[]) {
   FILE * inputFd;
-  char line[MAX_WORD_SIZE];
+  char line[WORD_LENGTH];
   int wordIndex = -1;
   inputFd = fopen(filepath, "r");
   if (inputFd == NULL) {
     printf("opening file %s failed\n", filepath);
-    return;
+    return 0;
   }
 
-  while(fgets(line, MAX_WORD_SIZE, inputFd) != NULL) {
+  while(fgets(line, WORD_LENGTH, inputFd) != NULL) {
     /* Strip LF & CRLF */
     line[strcspn(line, "\r\n")] = '\0';
     if (*line == '\0') continue;
 
-    if (strlen(line) == 1) continue; /* Skip one char lines */
+    unsigned int len = strlen(line);
+
+    if (len == 1) continue; /* Skip one char lines */
 
     int isMyHashValid = isValidHash(line, knownAnagramHash);
 
     if (isMyHashValid == 0) continue;
 
-    int isMyWordKnown = isKnownWord(words, line);
+    int isMyWordKnown = isKnownWord(words, line, wordIndex + 1);
 
     if (isMyWordKnown == 1) continue;
 
     wordIndex +=1;
-    strcpy(words[wordIndex]->text, line);
-    words[wordIndex]->len = strlen(line);
+    strcpy(words[wordIndex]->value, line);
+    words[wordIndex]->len = len;
+    getHash(line, words[wordIndex]->hash);
   }
 
   if (fclose(inputFd) == -1) {
     printf("close input file %s failed\n", filepath);
+    return 0;
+  }
+
+  return wordIndex + 1;
+}
+
+
+void md5sum(unsigned char anagram[], int len, char md5[]) {
+  unsigned char md5sum[MD5_DIGEST_LENGTH];
+  MD5(anagram, len, md5sum);
+
+  int i;
+  for(i = 0; i < MD5_DIGEST_LENGTH; i++) {
+    sprintf(&md5[i*2], "%02x", (unsigned int)md5sum[i]);
   }
 }
 
-int isAnagram(const char word[], int wordLength, const int * knownHash) {
-  int hash[HASH_SIZE] = {0};
-  int i = 0;
-  for (i = 0; i < wordLength; i += 1) {
-    char c = word[i];
-    if (c == ' ') continue; /* Skip space character */
-    int index = c - 97;
-    if (index < 0 || index > 25) return 0; /* Fail if outsize a-z range */
-    hash[index] = hash[index] != 0 ? hash[index] + 1 : 1;
-  }
-
-  for (i = 0; i < HASH_SIZE; i += 1) {
-    if (hash[i] != knownHash[i]) {
-      return 0;
+int computeAnagram(struct word * const words[], const int indices[], const int wordsCount, unsigned char anagram[]) {
+  int i, j, k = 0;
+  for (i = 1; i <= wordsCount; i += 1) {
+    for (j = 0; j < words[indices[i]]->len; j += 1) {
+      anagram[k + j] = words[indices[i]]->value[j];
     }
+    k += j;
+    anagram[k++] = ' ';
   }
+  anagram[--k] = '\0';
 
-  return 1;
+  return k;
 }
 
-int isPossibleAnagram(const char word[], int wordLength, const int * knownHash) {
-  int hash[HASH_SIZE] = {0};
-  int i = 0;
-  for (i = 0; i < wordLength; i += 1) {
-    char c = word[i];
-    if (c == ' ') continue; /* Skip space character */
-    int index = c - 97;
-    if (index < 0 || index > 25) return 0; /* Fail if outsize a-z range */
-    hash[index] = hash[index] != 0 ? hash[index] + 1 : 1;
-  }
+void checkAnagrams(struct word * words[], int n, int c[], int size) {
+  if (n == 1) {
+    unsigned char anagram[ANAGRAM_LENGTH] = {0};
+    int anagramLen = computeAnagram(words, c, size, anagram);
 
-  for (i = 0; i < HASH_SIZE; i += 1) {
-    if (hash[i] > knownHash[i]) {
-      return 0;
-    }
-  }
-
-  return 1;
-}
-
-
-void md5sum(char phrase[], int currentLength, char md5[]) {
-		int i;
-		unsigned char md5sum[MD5_DIGEST_LENGTH];
-		MD5((unsigned char *)phrase, currentLength - 1, md5sum);
-		for(i = 0; i < MD5_DIGEST_LENGTH; i++) {
-      sprintf(&md5[i*2], "%02x", (unsigned int)md5sum[i]);
-		}
-}
-
-unsigned long int count = 0;
-void findHash(struct word * words[], char phrase[], int currentLength, int maxNumberOfWords,
-    const int * knownAnagramHash) {
-
-  /*
-  int i = 0;
-  for(i = 0; i <= maxNumberOfWords; i += 1) {
-    printf("\t");
-  }
-  printf("%s\n", phrase);
-  */
-
-  if (maxNumberOfWords > 4) return;
-
-  /* phrase always has space at the end so currentLength should be minus 1 */
-  if (currentLength - 1 == MAX_ANAGRAM_SIZE || currentLength == MAX_ANAGRAM_SIZE) {
-    if (isAnagram(phrase, currentLength, knownAnagramHash) == 0) return;
     char md5[33];
-    md5sum(phrase, currentLength, md5);
+    md5sum(anagram, anagramLen, md5);
 
     if ( strcmp(md5, "e4820b45d2277f3844eac66c903e84be") != 0 &&
          strcmp(md5, "23170acc097c24edb98fc5488ab033fe") != 0 &&
          strcmp(md5, "665e5bcb0c20062fe8abaaf4628bb154") != 0 ) return;
 
-		int m = 0;
-		for (m = 0; m < currentLength - 1; m += 1) {
-			printf("%c", phrase[m]);
-		}
-		printf("\n");
+    printf("%s\n", anagram);
   } else {
-    int i;
-    for (i = 0; i < MAX_NUM_WORDS; i += 1) {
-      int wordLen = words[i]->len;
-      int newLength = currentLength;
-      newLength += wordLen + 1; /* extra one for space */
-      if (newLength - 1 > MAX_ANAGRAM_SIZE) continue;
-
-      int m;
-      for (m = 0; m < wordLen; m += 1) {
-        phrase[m + currentLength] = words[i]->text[m];
+    int m;
+    for (m = 1; m < n; m += 1) {
+      checkAnagrams(words, n-1, c, size);
+      if (n % 2 == 0) {
+        int tmp = c[m];
+        c[m] = c[n];
+        c[n] = tmp;
+      } else {
+        int tmp = c[1];
+        c[1] = c[n];
+        c[n] = tmp;
       }
-      count += 1; if (count % 100000000 == 0) printf("%lu\n", count);
-
-      phrase[newLength - 1] = ' ';
-
-      if (isPossibleAnagram(phrase, currentLength, knownAnagramHash) == 0) continue;
-
-      phrase[newLength] = '\0';
-
-      findHash(words, phrase, newLength, maxNumberOfWords + 1, knownAnagramHash);
     }
+    checkAnagrams(words, n-1, c, size);
+  }
+}
+
+void combR(int start, int end, int c[], int size, struct word * words[],
+    const unsigned short int * knownHash) {
+  count++; if (count % 10000000 == 0) printf("%lu\n", count);
+
+  if (start >= 0) {
+    int i;
+    for (i = start; i <= end; i += 1) {
+      c[start + 1] = i;
+
+      /* TODO: Check possibility to use SIMD */
+      /* TODO: Change HASH_SIZE to not use 26 chars and use # of chars in anagram */
+      /* Check if sub-anagram */
+      unsigned short int hash[HASH_SIZE] = {0};
+      int k = 0, m = 0;
+      /*
+      for (k = 0; k < HASH_SIZE; k += 1) {
+        hash[k] = knownHash[k];
+        for (m = size; m >= start + 1; m -= 1) {
+          printf("%i %i %i %i\n", c[m], hash[k], words[c[m]]->hash[k],
+               hash[k] - words[c[m]]->hash[k]);
+          hash[k] = hash[k] - words[c[m]]->hash[k];
+          if (hash[k] < 0) return;
+        }
+      }
+      */
+
+      int len = 0;
+      for (m = size; m >= start + 1; m -= 1) {
+        len += words[c[m]]->len;
+      }
+      if (len > ANAGRAM_LENGTH) return;
+
+      combR(start - 1, i - 1, c, size, words, knownHash);
+    }
+  } else {
+    /* Check if anagram */
+    unsigned short int hash[HASH_SIZE] = {0};
+    int m = 0;
+
+    /* TODO: Check possibility to use SIMD */
+    for(m = 1; m <= size; m += 1) {
+        hash[0]  += words[c[m]]->hash[0]; /* letter: a */
+        hash[8]  += words[c[m]]->hash[8];  /* letter: i */
+        hash[11] += words[c[m]]->hash[11];  /* letter: l */
+        hash[13] += words[c[m]]->hash[13];  /* letter: n */
+        hash[14] += words[c[m]]->hash[14];  /* letter: o */
+        hash[15] += words[c[m]]->hash[15];  /* letter: p */
+        hash[17] += words[c[m]]->hash[17];  /* letter: r */
+        hash[18] += words[c[m]]->hash[18];  /* letter: s */
+        hash[19] += words[c[m]]->hash[19];  /* letter: t */
+        hash[20] += words[c[m]]->hash[20];  /* letter: u */
+        hash[22] += words[c[m]]->hash[22];  /* letter: w */
+        hash[24] += words[c[m]]->hash[24];  /* letter: y */
+    }
+
+    if (memcmp(hash, knownHash, HASH_SIZE) != 0) return;
+
+    int newC[size+1];
+    for(m = 1; m <= size; m += 1) {
+      newC[m] = c[m];
+    }
+    checkAnagrams(words, size, newC, size);
+  }
+}
+
+void allocateWords(struct word * words[]) {
+  int i = 0, j = 0;
+  for (i = 0; i < MAX_POSSIBLE_WORDS; i += 1) {
+    words[i] = malloc(WORD_LENGTH * sizeof(char) + (HASH_SIZE + 1) * sizeof(int));
+    strcpy(words[i]->value, "\0");
+    words[i]->len = 0;
+    for (j = 0; j < HASH_SIZE; j += 1) {
+      words[i]->hash[j] = 0;
+    }
+  }
+}
+
+void releaseWords(struct word * words[]) {
+  int i =0;
+  for (i = 0; i < MAX_POSSIBLE_WORDS; i += 1) {
+    free(words[i]);
   }
 }
 
@@ -197,38 +250,36 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  const char * knownAnagram = "poultry outwits ants";
+  unsigned short int knownAnagramHash[HASH_SIZE] = {0};
+  getHash(knownAnagram, knownAnagramHash);
+
+  struct word * words[MAX_POSSIBLE_WORDS];
+  allocateWords(words);
+
   const char * filepath = argv[1];
-  const char * knownAnagramNoSpaces = "poultryoutwitsants";
-  /*const char * knownAnagram = "poultry outwits ants";*/
+  int possibleWordsCount = getPossibleWord(filepath, knownAnagramHash, words);
 
-  int knownAnagramHash[HASH_SIZE] = {0};
-  getHash(knownAnagramNoSpaces, knownAnagramHash);
-
-  struct word * words[MAX_NUM_WORDS];
-  int i = 0;
-  for (i = 0; i < MAX_NUM_WORDS; i += 1) {
-    words[i] = malloc(MAX_WORD_SIZE * sizeof(char) + sizeof(unsigned short int));
-    strcpy(words[i]->text, "\0");
+  if (possibleWordsCount == 0) {
+    printf("No possible words found!\n");
+    return 1;
   }
 
-  getPossibleWord(filepath, knownAnagramHash, words);
+  printf("Found %i possible words\n", possibleWordsCount);
 
-  const int maxPhraseSize =  MAX_ANAGRAM_SIZE + 2; /* extra 2 for space & \0 */
-  char * phrase = malloc(maxPhraseSize * sizeof(char));
-  for (i = 0; i < maxPhraseSize; i += 1) {
-    phrase[0] = '\0';
-  }
+  int n = possibleWordsCount;
+  int t;
 
-  int currentLength = 0;
-  int maxNumberOfWords = 0;
+  /* comb3 choose 3-words from n-words */
+  t = 3;
+  int c[t + 1];
+  combR(t - 1, n - 1, c, t, words, knownAnagramHash);
 
-  findHash(words, phrase, currentLength, maxNumberOfWords, knownAnagramHash);
+  /* comb4 choose 3-words from n-words */
+  t = 4;
+  int d[t + 1];
+  combR(t - 1, n - 1, d, t, words, knownAnagramHash);
 
-  for (i = 0; i < MAX_NUM_WORDS; i += 1) {
-    free(words[i]);
-  }
-
-  free(phrase);
-
+  releaseWords(words);
   return 0;
 }
