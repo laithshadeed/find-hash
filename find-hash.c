@@ -19,6 +19,8 @@
 #define WORD_LENGTH 25
 #define ANAGRAM_LENGTH 23
 #define MAX_POSSIBLE_WORDS 2000
+#define COMB3_ITERATIONS 743255415 /* = (1647 x 1646 x 1645) / (3 x 2) */
+#define COMB4_ITERATIONS 305477975565 /* = (1647 x 1646 x 1645 x 1644) / (4 x 3 x 2) */
 
 long int count = 0;
 
@@ -129,6 +131,8 @@ int computeAnagram(struct word * const words[], const int indices[], const int w
   return k;
 }
 
+/* TODO: Check other algorithm for generating permutation. This one called
+ * heap recursive https://en.wikipedia.org/wiki/Heap%27s_algorithm */
 void checkAnagrams(struct word * words[], int n, int c[], int size) {
   if (n == 1) {
     unsigned char anagram[ANAGRAM_LENGTH] = {0};
@@ -141,7 +145,7 @@ void checkAnagrams(struct word * words[], int n, int c[], int size) {
          strcmp(md5, "23170acc097c24edb98fc5488ab033fe") != 0 &&
          strcmp(md5, "665e5bcb0c20062fe8abaaf4628bb154") != 0 ) return;
 
-    printf("%s\n", anagram);
+    printf("solution: %s\n", anagram);
   } else {
     int m;
     for (m = 1; m < n; m += 1) {
@@ -160,33 +164,30 @@ void checkAnagrams(struct word * words[], int n, int c[], int size) {
   }
 }
 
+/* TODO: Explore other combinatorics algorithms from D. Knuth Volume 4A book
+ * This algorithm was simply the ineffient nested loops he mentioned in 7.2.1.3 (15)
+ * But I made it recursive to allow both comb3 & comb4
+ * Check: combinatorial-algos.c
+ */
 void combR(int start, int end, int c[], int size, struct word * words[],
     const unsigned short int * knownHash) {
-  count++; if (count % 10000000 == 0) printf("%lu\n", count);
+
+  count++;
+  if (count % 10000000 == 0) {
+    printf("iteration: %lu out roughly %lu \n", count, size == 3 ? COMB3_ITERATIONS :
+        COMB4_ITERATIONS);
+  }
 
   if (start >= 0) {
     int i;
     for (i = start; i <= end; i += 1) {
       c[start + 1] = i;
 
-      /* TODO: Check possibility to use SIMD */
-      /* TODO: Change HASH_SIZE to not use 26 chars and use # of chars in anagram */
-      /* Check if sub-anagram */
-      unsigned short int hash[HASH_SIZE] = {0};
-      int k = 0, m = 0;
-      /*
-      for (k = 0; k < HASH_SIZE; k += 1) {
-        hash[k] = knownHash[k];
-        for (m = size; m >= start + 1; m -= 1) {
-          printf("%i %i %i %i\n", c[m], hash[k], words[c[m]]->hash[k],
-               hash[k] - words[c[m]]->hash[k]);
-          hash[k] = hash[k] - words[c[m]]->hash[k];
-          if (hash[k] < 0) return;
-        }
-      }
-      */
+      /* TODO: Explore possibly returning early if current comb is not sub-anagram
+       * TODO: Check the possiblity of checking anagram hash using SIMD
+       */
 
-      int len = 0;
+      int m, len = 0;
       for (m = size; m >= start + 1; m -= 1) {
         len += words[c[m]]->len;
       }
@@ -201,18 +202,18 @@ void combR(int start, int end, int c[], int size, struct word * words[],
 
     /* TODO: Check possibility to use SIMD */
     for(m = 1; m <= size; m += 1) {
-        hash[0]  += words[c[m]]->hash[0]; /* letter: a */
-        hash[8]  += words[c[m]]->hash[8];  /* letter: i */
-        hash[11] += words[c[m]]->hash[11];  /* letter: l */
-        hash[13] += words[c[m]]->hash[13];  /* letter: n */
-        hash[14] += words[c[m]]->hash[14];  /* letter: o */
-        hash[15] += words[c[m]]->hash[15];  /* letter: p */
-        hash[17] += words[c[m]]->hash[17];  /* letter: r */
-        hash[18] += words[c[m]]->hash[18];  /* letter: s */
-        hash[19] += words[c[m]]->hash[19];  /* letter: t */
-        hash[20] += words[c[m]]->hash[20];  /* letter: u */
-        hash[22] += words[c[m]]->hash[22];  /* letter: w */
-        hash[24] += words[c[m]]->hash[24];  /* letter: y */
+      hash[0]  += words[c[m]]->hash[0]; /* letter: a */
+      hash[8]  += words[c[m]]->hash[8];  /* letter: i */
+      hash[11] += words[c[m]]->hash[11];  /* letter: l */
+      hash[13] += words[c[m]]->hash[13];  /* letter: n */
+      hash[14] += words[c[m]]->hash[14];  /* letter: o */
+      hash[15] += words[c[m]]->hash[15];  /* letter: p */
+      hash[17] += words[c[m]]->hash[17];  /* letter: r */
+      hash[18] += words[c[m]]->hash[18];  /* letter: s */
+      hash[19] += words[c[m]]->hash[19];  /* letter: t */
+      hash[20] += words[c[m]]->hash[20];  /* letter: u */
+      hash[22] += words[c[m]]->hash[22];  /* letter: w */
+      hash[24] += words[c[m]]->hash[24];  /* letter: y */
     }
 
     if (memcmp(hash, knownHash, HASH_SIZE) != 0) return;
@@ -266,16 +267,22 @@ int main(int argc, char *argv[]) {
   }
 
   printf("Found %i possible words\n", possibleWordsCount);
+  printf("It will take roughly %i iteration to do comb3\n", COMB3_ITERATIONS);
+  printf("It will take roughly %lu iteration to do comb4\n", COMB4_ITERATIONS);
 
   int n = possibleWordsCount;
   int t;
 
+  /* TODO: Run combR on multiple core */
+
   /* comb3 choose 3-words from n-words */
+  /* The notation maps exactly to D. Knuth TAOCP V4A 7.2.1.3 (15) */
   t = 3;
   int c[t + 1];
   combR(t - 1, n - 1, c, t, words, knownAnagramHash);
 
   /* comb4 choose 3-words from n-words */
+  /* The notation maps exactly to D. Knuth TAOCP V4A 7.2.1.3 (15) */
   t = 4;
   int d[t + 1];
   combR(t - 1, n - 1, d, t, words, knownAnagramHash);
