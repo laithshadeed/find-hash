@@ -17,7 +17,7 @@
 /* TODO: HASH_SIZE should be only characters in the anagram not the whole alphabet */
 #define HASH_SIZE 26
 #define WORD_LENGTH 25
-#define ANAGRAM_LENGTH 23
+#define ANAGRAM_LENGTH 21
 #define MAX_POSSIBLE_WORDS 2000
 #define COMB3_ITERATIONS 743255415 /* = (1647 x 1646 x 1645) / (3 x 2) */
 #define COMB4_ITERATIONS 305477975565 /* = (1647 x 1646 x 1645 x 1644) / (4 x 3 x 2) */
@@ -135,7 +135,7 @@ int computeAnagram(struct word * const words[], const int indices[], const int w
  * heap recursive https://en.wikipedia.org/wiki/Heap%27s_algorithm */
 void checkAnagrams(struct word * words[], int n, int c[], int size) {
   if (n == 1) {
-    unsigned char anagram[ANAGRAM_LENGTH] = {0};
+    unsigned char anagram[ANAGRAM_LENGTH+1] = {0};
     int anagramLen = computeAnagram(words, c, size, anagram);
 
     char md5[33];
@@ -191,7 +191,7 @@ void combR(int start, int end, int c[], int size, struct word * words[],
       for (m = size; m >= start + 1; m -= 1) {
         len += words[c[m]]->len;
       }
-      if (len > ANAGRAM_LENGTH) return;
+      if (len + 3 > ANAGRAM_LENGTH) return;
 
       combR(start - 1, i - 1, c, size, words, knownHash);
     }
