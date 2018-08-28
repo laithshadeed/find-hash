@@ -117,7 +117,7 @@ void md5sum(unsigned char anagram[], int len, char md5[]) {
   }
 }
 
-int computeAnagram(struct word * const words[], const int indices[], const int wordsCount, unsigned char anagram[]) {
+int computeAnagram(struct word * const words[], const unsigned short int indices[], const int wordsCount, unsigned char anagram[]) {
   int i, j, k = 0;
   for (i = 1; i <= wordsCount; i += 1) {
     for (j = 0; j < words[indices[i]]->len; j += 1) {
@@ -133,7 +133,7 @@ int computeAnagram(struct word * const words[], const int indices[], const int w
 
 /* TODO: Check other algorithm for generating permutation. This one called
  * heap recursive https://en.wikipedia.org/wiki/Heap%27s_algorithm */
-void checkAnagrams(struct word * words[], int n, int c[], int size) {
+void enumerateAllAnagrams(struct word * const words[], int n, unsigned short int c[], int size) {
   if (n == 1) {
     unsigned char anagram[ANAGRAM_LENGTH+1] = {0};
     int anagramLen = computeAnagram(words, c, size, anagram);
@@ -149,7 +149,7 @@ void checkAnagrams(struct word * words[], int n, int c[], int size) {
   } else {
     int m;
     for (m = 1; m < n; m += 1) {
-      checkAnagrams(words, n-1, c, size);
+      enumerateAllAnagrams(words, n-1, c, size);
       if (n % 2 == 0) {
         int tmp = c[m];
         c[m] = c[n];
@@ -160,69 +160,95 @@ void checkAnagrams(struct word * words[], int n, int c[], int size) {
         c[n] = tmp;
       }
     }
-    checkAnagrams(words, n-1, c, size);
+    enumerateAllAnagrams(words, n-1, c, size);
   }
 }
 
-/* TODO: Explore other combinatorics algorithms from D. Knuth Volume 4A book
- * This algorithm was simply the ineffient nested loops he mentioned in 7.2.1.3 (15)
- * But I made it recursive to allow both comb3 & comb4
- * Check: combinatorial-algos.c
- */
-void combR(int start, int end, int c[], int size, struct word * words[],
-    const unsigned short int * knownHash) {
+void processComb(const unsigned short int c[], int size, struct word * const words[], unsigned short int const * const knownHash) {
+  int m = 0;
+  unsigned short int hash[HASH_SIZE] = {0};
+  unsigned short int len = 0;
 
-  count++;
-  if (count % 10000000 == 0) {
-    printf("iteration: %lu out roughly %lu \n", count, size == 3 ? COMB3_ITERATIONS :
-        COMB4_ITERATIONS);
+  /* TODO: Check possibility to use SIMD */
+  for(m = 1; m <= size; m += 1) {
+    hash[0]  += words[c[m]]->hash[0];   /* letter: a */
+    hash[8]  += words[c[m]]->hash[8];   /* letter: i */
+    hash[11] += words[c[m]]->hash[11];  /* letter: l */
+    hash[13] += words[c[m]]->hash[13];  /* letter: n */
+    hash[14] += words[c[m]]->hash[14];  /* letter: o */
+    hash[15] += words[c[m]]->hash[15];  /* letter: p */
+    hash[17] += words[c[m]]->hash[17];  /* letter: r */
+    hash[18] += words[c[m]]->hash[18];  /* letter: s */
+    hash[19] += words[c[m]]->hash[19];  /* letter: t */
+    hash[20] += words[c[m]]->hash[20];  /* letter: u */
+    hash[22] += words[c[m]]->hash[22];  /* letter: w */
+    hash[24] += words[c[m]]->hash[24];  /* letter: y */
+    len += words[c[m]]->len;
   }
 
-  if (start >= 0) {
-    int i;
-    for (i = start; i <= end; i += 1) {
-      c[start + 1] = i;
+  if (memcmp(hash, knownHash, HASH_SIZE) != 0) return;
+  if (len + 3 > ANAGRAM_LENGTH) return;
 
-      /* TODO: Explore possibly returning early if current comb is not sub-anagram
-       * TODO: Check the possiblity of checking anagram hash using SIMD
-       */
+  unsigned short int newC[size+1];
+  for(m = 1; m <= size; m += 1) {
+    newC[m] = c[m];
+  }
 
-      int m, len = 0;
-      for (m = size; m >= start + 1; m -= 1) {
-        len += words[c[m]]->len;
+  enumerateAllAnagrams(words, size, newC, size);
+}
+
+/* Revolving door algorithm from D. Knuth Volume 4A */
+void combRevolving(int t, int n, unsigned short int c[], struct word * const words[],
+    unsigned short int const * const knownHash) {
+
+  int j;
+  for (j = 1; j <= t; j += 1) {
+    c[j] = j - 1;
+  }
+  c[j] = n;
+
+  while(1) {
+    count += 1;
+    processComb(c, t, words, knownHash);
+
+    if (t % 2 != 0) {
+      if (c[1] + 1 < c[2]) {
+        c[1] += 1;
+        continue;
+      } else {
+        j = 2;
+        goto R4;
       }
-      if (len + 3 > ANAGRAM_LENGTH) return;
-
-      combR(start - 1, i - 1, c, size, words, knownHash);
-    }
-  } else {
-    /* Check if anagram */
-    unsigned short int hash[HASH_SIZE] = {0};
-    int m = 0;
-
-    /* TODO: Check possibility to use SIMD */
-    for(m = 1; m <= size; m += 1) {
-      hash[0]  += words[c[m]]->hash[0]; /* letter: a */
-      hash[8]  += words[c[m]]->hash[8];  /* letter: i */
-      hash[11] += words[c[m]]->hash[11];  /* letter: l */
-      hash[13] += words[c[m]]->hash[13];  /* letter: n */
-      hash[14] += words[c[m]]->hash[14];  /* letter: o */
-      hash[15] += words[c[m]]->hash[15];  /* letter: p */
-      hash[17] += words[c[m]]->hash[17];  /* letter: r */
-      hash[18] += words[c[m]]->hash[18];  /* letter: s */
-      hash[19] += words[c[m]]->hash[19];  /* letter: t */
-      hash[20] += words[c[m]]->hash[20];  /* letter: u */
-      hash[22] += words[c[m]]->hash[22];  /* letter: w */
-      hash[24] += words[c[m]]->hash[24];  /* letter: y */
+    } else {
+      if (c[1] > 0) {
+        c[1] -= 1;
+        continue;
+      } else {
+        j = 2;
+        goto R5;
+      }
     }
 
-    if (memcmp(hash, knownHash, HASH_SIZE) != 0) return;
-
-    int newC[size+1];
-    for(m = 1; m <= size; m += 1) {
-      newC[m] = c[m];
+R4: if (c[j] >= j) {
+      c[j] = c[j-1];
+      c[j-1] = j - 2;
+      continue;
+    } else {
+      j += 1;
     }
-    checkAnagrams(words, size, newC, size);
+
+R5: if (c[j] + 1 < c[j+1]) {
+      c[j-1] = c[j];
+      c[j] = c[j] + 1;
+      continue;
+    } else {
+      j += 1;
+      if (j <= t) {
+        goto R4;
+      } else {
+        return;
+      }
+    }
   }
 }
 
@@ -266,26 +292,26 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  long int comb3Iterations = possibleWordsCount *
+    (possibleWordsCount - 1) * (possibleWordsCount - 2) / 6;
+
+  long int comb4Iterations = possibleWordsCount *
+    (possibleWordsCount - 1) * (possibleWordsCount - 2) * (possibleWordsCount - 3) / 24;
+
   printf("Found %i possible words\n", possibleWordsCount);
-  printf("It will take roughly %i iteration to do comb3\n", COMB3_ITERATIONS);
-  printf("It will take roughly %lu iteration to do comb4\n", COMB4_ITERATIONS);
+  printf("It will take roughly %lu iteration to do comb3\n", comb3Iterations);
+  printf("It will take roughly %lu iteration to do comb4\n", comb4Iterations);
 
   int n = possibleWordsCount;
   int t;
 
-  /* TODO: Run combR on multiple core */
-
-  /* comb3 choose 3-words from n-words */
-  /* The notation maps exactly to D. Knuth TAOCP V4A 7.2.1.3 (15) */
   t = 3;
-  int c[t + 1];
-  combR(t - 1, n - 1, c, t, words, knownAnagramHash);
+  unsigned short int c[t+2];
+  combRevolving(t, n, c, words, knownAnagramHash);
 
-  /* comb4 choose 3-words from n-words */
-  /* The notation maps exactly to D. Knuth TAOCP V4A 7.2.1.3 (15) */
   t = 4;
-  int d[t + 1];
-  combR(t - 1, n - 1, d, t, words, knownAnagramHash);
+  unsigned short int d[t+2];
+  combRevolving(t, n, d, words, knownAnagramHash);
 
   releaseWords(words);
   return 0;
